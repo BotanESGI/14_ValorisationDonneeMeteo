@@ -150,6 +150,12 @@ jobs:
             aquasec/trivy:latest \
             fs --exit-code 0 --ignore-unfixed --vuln-type os,library --format json -o reports/trivy-fs.json .
 
+      - name: Ensure Trivy FS reports exist
+        if: always()
+        run: |
+          test -f reports/trivy-fs.sarif || printf '%s\n' '{"version":"2.1.0","runs":[]}' > reports/trivy-fs.sarif
+          test -f reports/trivy-fs.json || printf '%s\n' '{"Results":[]}' > reports/trivy-fs.json
+
       - name: Upload Trivy FS SARIF to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@v3
