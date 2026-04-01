@@ -288,4 +288,3 @@ jobs:
           tags: |
             ${{ steps.images.outputs.frontend }}:${{ github.sha }}
             ${{ steps.images.outputs.frontend }}:latest
-
