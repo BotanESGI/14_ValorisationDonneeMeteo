@@ -137,27 +137,18 @@ jobs:
           name: scan-code-report-semgrep
           path: reports/semgrep.sarif
 
-      - name: Trivy FS scan -> SARIF
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: sarif
-          output: reports/trivy-fs.sarif
-          ignore-unfixed: true
-          vuln-type: os,library
-          exit-code: "0"
-
-      - name: Trivy FS scan -> JSON
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: json
-          output: reports/trivy-fs.json
-          ignore-unfixed: true
-          vuln-type: os,library
-          exit-code: "0"
+      - name: Trivy FS scan (SARIF + JSON)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workdir" \
+            -w /workdir \
+            aquasec/trivy:latest \
+            fs --exit-code 0 --ignore-unfixed --vuln-type os,library --format sarif -o reports/trivy-fs.sarif .
+          docker run --rm \
+            -v "${{ github.workspace }}:/workdir" \
+            -w /workdir \
+            aquasec/trivy:latest \
+            fs --exit-code 0 --ignore-unfixed --vuln-type os,library --format json -o reports/trivy-fs.json .
 
       - name: Upload Trivy FS SARIF to GitHub Security
         if: always()
