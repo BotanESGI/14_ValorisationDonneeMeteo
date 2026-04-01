@@ -12,6 +12,8 @@ from drf_spectacular.views import (
 urlpatterns = [
     # API v1
     path("api/v1/", include("weather.urls")),
+    # Prometheus metrics
+    path("", include("django_prometheus.urls")),
     # OpenAPI schema and documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
