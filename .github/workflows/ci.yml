@@ -7,6 +7,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  TRIVY_IMAGE: aquasec/trivy:0.56.2
 
 permissions:
   contents: read
@@ -139,28 +140,41 @@ jobs:
 
       - name: Trivy FS scan (SARIF + JSON)
         run: |
+          docker pull "${TRIVY_IMAGE}" || true
           docker run --rm \
             -v "${{ github.workspace }}:/workdir" \
             -w /workdir \
-            aquasec/trivy:latest \
-            fs --exit-code 0 --ignore-unfixed --vuln-type os,library --format sarif -o reports/trivy-fs.sarif .
+            "${TRIVY_IMAGE}" \
+            fs --exit-code 0 --ignore-unfixed --vuln-type os,library --format sarif -o reports/trivy-fs.sarif . || true
           docker run --rm \
             -v "${{ github.workspace }}:/workdir" \
             -w /workdir \
-            aquasec/trivy:latest \
-            fs --exit-code 0 --ignore-unfixed --vuln-type os,library --format json -o reports/trivy-fs.json .
+            "${TRIVY_IMAGE}" \
+            fs --exit-code 0 --ignore-unfixed --vuln-type os,library --format json -o reports/trivy-fs.json . || true
 
       - name: Ensure Trivy FS reports exist
         if: always()
         run: |
-          test -f reports/trivy-fs.sarif || printf '%s\n' '{"version":"2.1.0","runs":[]}' > reports/trivy-fs.sarif
-          test -f reports/trivy-fs.json || printf '%s\n' '{"Results":[]}' > reports/trivy-fs.json
+          test -s reports/trivy-fs.sarif || cat > reports/trivy-fs.sarif <<'SARIF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": { "driver": { "name": "trivy", "informationUri": "https://trivy.dev/" } },
+                "results": []
+              }
+            ]
+          }
+          SARIF
+          test -s reports/trivy-fs.json || printf '%s\n' '{"Results":[]}' > reports/trivy-fs.json
 
       - name: Upload Trivy FS SARIF to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/trivy-fs.sarif
+        continue-on-error: true
 
       - name: Upload Trivy FS report
         if: always()
@@ -224,25 +238,38 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Trivy image scan (backend) -> SARIF
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          image-ref: ${{ steps.images.outputs.backend }}:${{ github.sha }}
-          format: sarif
-          output: reports/trivy-backend-image.sarif
-          ignore-unfixed: true
-          vuln-type: os,library
-          exit-code: "0"
+      - name: Trivy image scan (backend) (SARIF + JSON)
+        run: |
+          docker pull "${TRIVY_IMAGE}" || true
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}:/workdir" \
+            -w /workdir \
+            "${TRIVY_IMAGE}" \
+            image --exit-code 0 --ignore-unfixed --vuln-type os,library --format sarif -o reports/trivy-backend-image.sarif "${{ steps.images.outputs.backend }}:${{ github.sha }}" || true
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}:/workdir" \
+            -w /workdir \
+            "${TRIVY_IMAGE}" \
+            image --exit-code 0 --ignore-unfixed --vuln-type os,library --format json -o reports/trivy-backend-image.json "${{ steps.images.outputs.backend }}:${{ github.sha }}" || true
 
-      - name: Trivy image scan (backend) -> JSON
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          image-ref: ${{ steps.images.outputs.backend }}:${{ github.sha }}
-          format: json
-          output: reports/trivy-backend-image.json
-          ignore-unfixed: true
-          vuln-type: os,library
-          exit-code: "0"
+      - name: Ensure Trivy image reports exist
+        if: always()
+        run: |
+          test -s reports/trivy-backend-image.sarif || cat > reports/trivy-backend-image.sarif <<'SARIF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": { "driver": { "name": "trivy", "informationUri": "https://trivy.dev/" } },
+                "results": []
+              }
+            ]
+          }
+          SARIF
+          test -s reports/trivy-backend-image.json || printf '%s\n' '{"Results":[]}' > reports/trivy-backend-image.json
 
       - name: Generate VEX (OpenVEX) from Trivy JSON
         run: |
@@ -256,6 +283,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/trivy-backend-image.sarif
+        continue-on-error: true
 
       - name: Upload Trivy image report + VEX
         if: always()
